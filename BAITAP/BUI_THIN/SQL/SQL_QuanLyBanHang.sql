@@ -81,16 +81,14 @@ CREATE TABLE PhieuXuatHang
 
 CREATE TABLE ChiTietPhieuXuat
 (
-    MaChiTietPX VARCHAR(10) NOT NULL,
     MaSoPhieuXuat VARCHAR(10) NOT NULL,
     MaVatTu VARCHAR(10) NOT NULL,
     SoLuongXuat INT NOT NULL,
     DonGia int not null,
-    CONSTRAINT PK_ChiTietPhieuXuat PRIMARY KEY(MaChiTietPX),
+    CONSTRAINT PK_ChiTietPhieuXuat PRIMARY KEY(MaSoPhieuXuat, MaVatTu),
     CONSTRAINT FK_ChiTietPhieuXuat1 FOREIGN KEY(MaSoPhieuXuat) REFERENCES PhieuXuatHang(MaSoPhieuXuat),
     CONSTRAINT FK_ChiTietPhieuXuat2 FOREIGN KEY(MaVatTu) REFERENCES VatTu(MaVatTu)
 )
-
 
 
 --Thêm dữ liệu vào bảng--
@@ -159,12 +157,14 @@ INSERT INTO PhieuXuatHang VALUES('PX04', '18/07/2018', N'Khách hàng 05')
 INSERT INTO PhieuXuatHang VALUES('PX05', '21/03/2018', N'Khách hàng 03')
 SELECT * FROM PhieuXuatHang
 
-INSERT INTO ChiTietPhieuXuat VALUES('CTPX01', 'PX03', 'VT02', 70, 200000)
-INSERT INTO ChiTietPhieuXuat VALUES('CTPX02', 'PX04', 'VT01', 27, 200000)
-INSERT INTO ChiTietPhieuXuat VALUES('CTPX03', 'PX01', 'VT03', 22, 200000)
-INSERT INTO ChiTietPhieuXuat VALUES('CTPX04', 'PX03', 'VT05', 12, 200000)
-INSERT INTO ChiTietPhieuXuat VALUES('CTPX05', 'PX02', 'VT05', 32, 200000)
+INSERT INTO ChiTietPhieuXuat VALUES('PX03', 'VT02', 70, 200000)
+INSERT INTO ChiTietPhieuXuat VALUES('PX04', 'VT01', 27, 200000)
+INSERT INTO ChiTietPhieuXuat VALUES('PX01', 'VT03', 22, 200000)
+INSERT INTO ChiTietPhieuXuat VALUES('PX03', 'VT05', 12, 200000)
+INSERT INTO ChiTietPhieuXuat VALUES('PX02', 'VT05', 32, 200000)
+INSERT INTO ChiTietPhieuXuat VALUES('PX05', 'VT03', 93, 190000)
 SELECT * FROM ChiTietPhieuXuat
+DELETE FROM ChiTietPhieuXuat WHERE MaSoPhieuXuat = 'PX04' AND MaVatTu = 'VT06'
 
 --Câu 6: Lấy ra danh sách những đơn đặt hàng từ tháng 1/2018 đến tháng 6/2018--
 --Cách 1--
@@ -505,6 +505,7 @@ SELECT * FROM ChiTietPhieuNhap
  Viết thủ tục kiểm tra trạng thái của các vật tư hiện đang có*/
 --Thêm cột TinhTrang vào bảng VậtTư--
 ALTER TABLE VatTu ADD TinhTrang Bit
+update VatTu set TinhTrang = 0 WHERE MaVatTu = 'VT01'
 SELECT * FROM VatTu
 --Viết thủ tục kiểm tra trạng thái của các vật tư hiện đang có trong bảng VậtTư--
 ALTER PROCEDURE sp_Check_VatTu AS
@@ -569,6 +570,72 @@ END
 
 
  /*Câu 32: Viết thủ tục tính lượng hàng tồn kho hiện tại cho mỗi loại vật tư và áp dụng lên bảng vật tư*/
-CREATE PROCEDURE sp_HangTonKho_Vattu ON 
+ALTER PROCEDURE sp_HangTonKho_Vattu AS
+BEGIN
+    DECLARE @TB TABLE(MaVTu VARCHAR(10), TongNhap INT, TongXuat INT)
+    INSERT INTO @TB(MaVTu, TongNhap, TongXuat) 
+    SELECT VatTu.MaVatTu, CASE 
+    WHEN SUM(SoLuongNhap) IS NULL THEN 0
+    ELSE SUM(SoLuongNhap)
+    END, CASE 
+    WHEN SUM(SoLuongXuat) IS NULL THEN 0
+    ELSE SUM(SoLuongXuat)
+    END
+    from VatTu FULL join ChiTietPhieuNhap on VatTu.MaVatTu = ChiTietPhieuNhap.MaVatTu
+    FULL JOIN ChiTietPhieuXuat ON ChiTietPhieuNhap.MaVatTu = ChiTietPhieuXuat.MaVatTu
+    GROUP BY VatTu.MaVatTu
+    UPDATE VatTu SET TinhTrang = 1 WHERE MaVatTu IN (SELECT MaVTu FROM @TB WHERE TongNhap > TongXuat)
+    UPDATE VatTu SET TinhTrang = 0 WHERE MaVatTu IN (SELECT MaVTu FROM @TB WHERE TongNhap <= TongXuat)
+    -- SELECT * FROM @TB
+    SELECT * FROM VatTu
+   EXEC sp_Check_VatTu
+    --Hàng tồn kho = Tồn đầu kỳ + Số lượng nhập - Số lượng xuất--
+END
+sp_HangTonKho_Vattu
  /*Câu 33: Tạo trigger cho phép thay đổi số lượng tồn kho vật tư mỗi khi có sự thay đổi vể nhập xuất. 
  Đưa ra thông báo “Không Đủ Vật Tư Đề Xuất” trong trường hợp không đủ vật tư theo phiếu chi tiết xuất*/
+ALTER TRIGGER trg_TonKho_Nhap ON ChiTietPhieuNhap
+AFTER INSERT, UPDATE, DELETE
+AS
+BEGIN
+SET NOCOUNT ON;
+    DECLARE @tb_TonKho TABLE(MVT VARCHAR(10), TN INT, TX INT)
+    INSERT INTO @tb_TonKho(MVT, TN, TX)
+    SELECT ChiTietPhieuNhap.MaVatTu, CASE 
+    WHEN SUM(ChiTietPhieuNhap.SoLuongNhap) IS NULL THEN 0
+    ELSE SUM(ChiTietPhieuNhap.SoLuongNhap)
+    END, CASE 
+    WHEN SUM(ChiTietPhieuXuat.SoLuongXuat) IS NULL THEN 0
+    ELSE SUM(ChiTietPhieuXuat.SoLuongXuat)
+    END
+    FROM ChiTietPhieuNhap INNER JOIN ChiTietPhieuXuat ON ChiTietPhieuNhap.MaVatTu = ChiTietPhieuXuat.MaVatTu
+    -- INNER JOIN inserted on inserted.MaVatTu = ChiTietPhieuNhap.MaVatTu
+    -- INNER JOIN deleted ON deleted.MaVatTu = ChiTietPhieuNhap.MaVatTu
+    WHERE ChiTietPhieuNhap.MaVatTu IN 
+    (SELECT MaVatTu FROM TonKho)
+    GROUP BY ChiTietPhieuNhap.MaVatTu
+IF EXISTS (SELECT * FROM inserted) AND NOT EXISTS(SELECT * FROM deleted)
+BEGIN
+
+    UPDATE TonKho SET
+        TongSLNhap = TB.TN,
+        TongSLXuat = TB.TX,
+        SLCuoi = SLDau + TongSLNhap - TongSLXuat + inserted.SoLuongNhap
+    FROM TonKho, @tb_TonKho TB, inserted
+    WHERE TonKho.MaVatTu = TB.MVT AND inserted.MaVatTu = TonKho.MaVatTu
+END
+IF EXISTS (SELECT * FROM deleted) AND NOT EXISTS (SELECT * FROM inserted)
+BEGIN
+    UPDATE TonKho SET
+        TongSLNhap = TB.TN,
+        TongSLXuat = TB.TX,
+        SLCuoi = SLDau + TongSLNhap - TongSLXuat - deleted.SoLuongNhap
+    FROM TonKho, @tb_TonKho TB, deleted
+    WHERE TonKho.MaVatTu = TB.MVT AND deleted.MaVatTu = TonKho.MaVatTu
+END
+END 
+INSERT INTO ChiTietPhieuNhap(MaSoPhieuNhap, MaVatTu, SoLuongNhap, DonGia) VALUES('PN05', 'VT03', 500, 201000)
+INSERT INTO ChiTietPhieuNhap(MaSoPhieuNhap, MaVatTu, SoLuongNhap, DonGia) VALUES('PN06', 'VT01', 1000, 250000)
+DELETE FROM ChiTietPhieuNhap WHERE MaSoPhieuNhap = 'PN06' AND MaVatTu = 'VT01'
+SELECT * FROM TonKho
+SELECT * FROM ChiTietPhieuNhap
