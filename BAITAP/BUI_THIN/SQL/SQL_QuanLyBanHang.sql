@@ -594,26 +594,28 @@ END
 sp_HangTonKho_Vattu
  /*Câu 33: Tạo trigger cho phép thay đổi số lượng tồn kho vật tư mỗi khi có sự thay đổi vể nhập xuất. 
  Đưa ra thông báo “Không Đủ Vật Tư Đề Xuất” trong trường hợp không đủ vật tư theo phiếu chi tiết xuất*/
-ALTER TRIGGER trg_TonKho_Nhap ON ChiTietPhieuNhap
+--Trigger on ChiTietPhieuNhap--
+CREATE TRIGGER trg_TonKho_Nhap ON ChiTietPhieuNhap
 AFTER INSERT, UPDATE, DELETE
 AS
 BEGIN
 SET NOCOUNT ON;
     DECLARE @tb_TonKho TABLE(MVT VARCHAR(10), TN INT, TX INT)
     INSERT INTO @tb_TonKho(MVT, TN, TX)
-    SELECT ChiTietPhieuNhap.MaVatTu, CASE 
-    WHEN SUM(ChiTietPhieuNhap.SoLuongNhap) IS NULL THEN 0
-    ELSE SUM(ChiTietPhieuNhap.SoLuongNhap)
-    END, CASE 
-    WHEN SUM(ChiTietPhieuXuat.SoLuongXuat) IS NULL THEN 0
-    ELSE SUM(ChiTietPhieuXuat.SoLuongXuat)
-    END
-    FROM ChiTietPhieuNhap INNER JOIN ChiTietPhieuXuat ON ChiTietPhieuNhap.MaVatTu = ChiTietPhieuXuat.MaVatTu
-    -- INNER JOIN inserted on inserted.MaVatTu = ChiTietPhieuNhap.MaVatTu
-    -- INNER JOIN deleted ON deleted.MaVatTu = ChiTietPhieuNhap.MaVatTu
-    WHERE ChiTietPhieuNhap.MaVatTu IN 
+    SELECT ChiTietPhieuXuat.MaVatTu,CASE 
+    WHEN TongNhap IS NULL THEN 0
+    ELSE TongNhap END,CASE 
+    WHEN SUM(SoLuongXuat) IS NULL THEN 0
+    ELSE SUM(SoLuongXuat) END
+    FROM
+    (SELECT MaVatTu, SUM(SoLuongNhap)[TongNhap]
+    from ChiTietPhieuNhap
+    GROUP BY MaVatTu) AS [tam] 
+    INNER JOIN ChiTietPhieuXuat on tam.MaVatTu = ChiTietPhieuXuat.MaVatTu
+    WHERE tam.MaVatTu in
     (SELECT MaVatTu FROM TonKho)
-    GROUP BY ChiTietPhieuNhap.MaVatTu
+    GROUP BY ChiTietPhieuXuat.MaVatTu, TongNhap
+ 
 IF EXISTS (SELECT * FROM inserted) AND NOT EXISTS(SELECT * FROM deleted)
 BEGIN
 
@@ -634,8 +636,62 @@ BEGIN
     WHERE TonKho.MaVatTu = TB.MVT AND deleted.MaVatTu = TonKho.MaVatTu
 END
 END 
-INSERT INTO ChiTietPhieuNhap(MaSoPhieuNhap, MaVatTu, SoLuongNhap, DonGia) VALUES('PN05', 'VT03', 500, 201000)
-INSERT INTO ChiTietPhieuNhap(MaSoPhieuNhap, MaVatTu, SoLuongNhap, DonGia) VALUES('PN06', 'VT01', 1000, 250000)
+INSERT INTO ChiTietPhieuNhap(MaSoPhieuNhap, MaVatTu, SoLuongNhap, DonGia) VALUES('PN05', 'VT01', 500, 201000)
+INSERT INTO ChiTietPhieuNhap(MaSoPhieuNhap, MaVatTu, SoLuongNhap, DonGia) VALUES('PN06', 'VT01', 1500, 250000)
+INSERT INTO ChiTietPhieuNhap(MaSoPhieuNhap, MaVatTu, SoLuongNhap, DonGia) VALUES('PN05', 'VT03', 2500, 250000)
+INSERT INTO ChiTietPhieuNhap(MaSoPhieuNhap, MaVatTu, SoLuongNhap, DonGia) VALUES('PN06', 'VT05', 225, 112000)
+SELECT CONCAT(MONTH(NamThang), '/', YEAR(NamThang)) [Thời gian], MaVatTu, SLDau[Số lượng tồn đầu kỳ], TongSLNhap, TongSLXuat, SLCuoi[Số lượng tồn cuối kỳ] FROM TonKho
+
+DELETE FROM ChiTietPhieuNhap WHERE MaSoPhieuNhap = 'PN05' AND MaVatTu = 'VT01'
 DELETE FROM ChiTietPhieuNhap WHERE MaSoPhieuNhap = 'PN06' AND MaVatTu = 'VT01'
-SELECT * FROM TonKho
-SELECT * FROM ChiTietPhieuNhap
+DELETE FROM ChiTietPhieuNhap WHERE MaSoPhieuNhap = 'PN05' AND MaVatTu = 'VT03'
+DELETE FROM ChiTietPhieuNhap WHERE MaSoPhieuNhap = 'PN06' AND MaVatTu = 'VT05'
+SELECT CONCAT(MONTH(NamThang), '/', YEAR(NamThang)) [Thời gian], MaVatTu, SLDau[Số lượng tồn đầu kỳ], TongSLNhap, TongSLXuat, SLCuoi[Số lượng tồn cuối kỳ] FROM TonKho
+
+SELECT * FROM ChiTietPhieuNhap ORDER BY MaVatTu
+SELECT * FROM ChiTietPhieuXuat ORDER BY MaVatTu
+
+--Trigger on ChiTietPhieuXuat--
+CREATE TRIGGER trg_TonKho_Xuat ON ChiTietPhieuXuat
+AFTER INSERT, UPDATE, DELETE
+AS
+BEGIN
+SET NOCOUNT ON;
+    DECLARE @tb_TonKho_Xuat TABLE(MaVT VARCHAR(10), TNhap INT, TXuat INT)
+    INSERT INTO @tb_TonKho_Xuat(MaVT, TXuat, TNhap)
+    SELECT ChiTietPhieuNhap.MaVatTu,CASE 
+    WHEN TongXuat IS NULL THEN 0
+    ELSE TongXuat END,CASE 
+    WHEN SUM(SoLuongNhap) IS NULL THEN 0
+    ELSE SUM(SoLuongNhap) END
+    FROM
+    (SELECT MaVatTu, SUM(SoLuongXuat)[TongXuat]
+    from ChiTietPhieuXuat
+    GROUP BY MaVatTu) AS [tam] 
+    INNER JOIN ChiTietPhieuNhap on tam.MaVatTu = ChiTietPhieuNhap.MaVatTu
+    WHERE tam.MaVatTu in
+    (SELECT MaVatTu FROM TonKho)
+    GROUP BY ChiTietPhieuNhap.MaVatTu, TongXuat
+    
+IF EXISTS (SELECT * FROM inserted) AND NOT EXISTS(SELECT * FROM deleted)
+BEGIN
+
+    UPDATE TonKho SET
+        TongSLNhap = TB1.TNhap,
+        TongSLXuat = TB1.TXuat,
+        SLCuoi = SLDau + TongSLNhap - TongSLXuat + inserted.SoLuongXuat
+    FROM TonKho, @tb_TonKho_Xuat TB1, inserted
+    WHERE TonKho.MaVatTu = TB1.MaVT AND inserted.MaVatTu = TonKho.MaVatTu
+END
+IF EXISTS (SELECT * FROM deleted) AND NOT EXISTS (SELECT * FROM inserted)
+BEGIN
+    UPDATE TonKho SET
+        TongSLNhap = TB1.TNhap,
+        TongSLXuat = TB1.TXuat,
+        SLCuoi = SLDau + TongSLNhap - TongSLXuat - deleted.SoLuongXuat
+    FROM TonKho, @tb_TonKho_Xuat TB1, deleted
+    WHERE TonKho.MaVatTu = TB1.MaVT AND deleted.MaVatTu = TonKho.MaVatTu
+END
+END 
+
+
