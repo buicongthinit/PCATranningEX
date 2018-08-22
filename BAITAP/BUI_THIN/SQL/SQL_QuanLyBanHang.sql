@@ -641,16 +641,24 @@ BEGIN
         SLCuoi = SLDau + TongSLNhap - TongSLXuat - deleted.SoLuongNhap
     FROM TonKho, @tb_TonKho TB, deleted
     WHERE TonKho.MaVatTu = TB.MVT AND deleted.MaVatTu = TonKho.MaVatTu
+
+    UPDATE TonKho SET
+        TongSLNhap = 0
+    WHERE MaVatTu NOT IN(SELECT MaVatTu FROM ChiTietPhieuNhap)
 END
+
 END 
 INSERT INTO ChiTietPhieuNhap(MaSoPhieuNhap, MaVatTu, SoLuongNhap, DonGia) VALUES('PN05', 'VT01', 500, 201000)
 INSERT INTO ChiTietPhieuNhap(MaSoPhieuNhap, MaVatTu, SoLuongNhap, DonGia) VALUES('PN06', 'VT01', 1500, 250000)
+INSERT INTO ChiTietPhieuNhap(MaSoPhieuNhap, MaVatTu, SoLuongNhap, DonGia) VALUES('PN04', 'VT02', 200, 122222)
 INSERT INTO ChiTietPhieuNhap(MaSoPhieuNhap, MaVatTu, SoLuongNhap, DonGia) VALUES('PN05', 'VT03', 2500, 250000)
 INSERT INTO ChiTietPhieuNhap(MaSoPhieuNhap, MaVatTu, SoLuongNhap, DonGia) VALUES('PN06', 'VT05', 225, 112000)
 SELECT CONCAT(MONTH(NamThang), '/', YEAR(NamThang)) [Thời gian], MaVatTu, SLDau[Số lượng tồn đầu kỳ], TongSLNhap, TongSLXuat, SLCuoi[Số lượng tồn cuối kỳ] FROM TonKho
 
 DELETE FROM ChiTietPhieuNhap WHERE MaSoPhieuNhap = 'PN05' AND MaVatTu = 'VT01'
 DELETE FROM ChiTietPhieuNhap WHERE MaSoPhieuNhap = 'PN06' AND MaVatTu = 'VT01'
+DELETE FROM ChiTietPhieuNhap WHERE MaSoPhieuNhap = 'PN04' AND MaVatTu = 'VT02'
+DELETE FROM ChiTietPhieuNhap WHERE MaSoPhieuNhap = 'PN03' AND MaVatTu = 'VT02'
 DELETE FROM ChiTietPhieuNhap WHERE MaSoPhieuNhap = 'PN05' AND MaVatTu = 'VT03'
 DELETE FROM ChiTietPhieuNhap WHERE MaSoPhieuNhap = 'PN06' AND MaVatTu = 'VT05'
 SELECT CONCAT(MONTH(NamThang), '/', YEAR(NamThang)) [Thời gian], MaVatTu, SLDau[Số lượng tồn đầu kỳ], TongSLNhap, TongSLXuat, SLCuoi[Số lượng tồn cuối kỳ] FROM TonKho
@@ -683,12 +691,27 @@ SET NOCOUNT ON;
     
 IF EXISTS (SELECT * FROM inserted) AND NOT EXISTS(SELECT * FROM deleted)
 BEGIN
-        UPDATE TonKho SET
-            TongSLNhap = TB1.TNhap,
-            TongSLXuat = TB1.TXuat,
-            SLCuoi = SLDau + TongSLNhap - TongSLXuat - inserted.SoLuongXuat
-        FROM TonKho, @tb_TonKho_Xuat TB1, inserted
-        WHERE TonKho.MaVatTu = TB1.MaVT AND inserted.MaVatTu = TonKho.MaVatTu
+    UPDATE TonKho SET
+        TongSLNhap = TB1.TNhap,
+        TongSLXuat = TB1.TXuat,
+        SLCuoi = SLDau + TongSLNhap - TongSLXuat - inserted.SoLuongXuat
+    FROM TonKho, @tb_TonKho_Xuat TB1, inserted
+    WHERE TonKho.MaVatTu = TB1.MaVT AND inserted.MaVatTu = TonKho.MaVatTu
+    DECLARE @SLXuat_Insert INT, @TonKho INT
+    SELECT @SLXuat_Insert = SoLuongXuat from inserted
+    SELECT @TonKho = SLCuoi FROM TonKho
+    WHERE MaVatTu IN(SELECT MaVatTu FROM inserted)
+    BEGIN TRANSACTION
+    IF(@SLXuat_Insert <= @TonKho)
+    BEGIN
+    PRINT N'Đã thêm bản ghi thành công!'
+    COMMIT TRANSACTION    
+    END
+    ELSE
+    BEGIN
+    PRINT N'Không đủ vật tư để xuất'
+    ROLLBACK
+    END
 END
 IF EXISTS (SELECT * FROM deleted) AND NOT EXISTS (SELECT * FROM inserted)
 BEGIN
@@ -716,28 +739,7 @@ SELECT * FROM TonKho
 SELECT * FROM ChiTietPhieuNhap ORDER BY MaVatTu
 SELECT * FROM ChiTietPhieuXuat ORDER BY MaVatTu
 
---Đưa ra thông báo Không đủ vật tư để xuất--
-ALTER TRIGGER trg_CheckHang_Xuat
-ON ChiTietPhieuXuat
-FOR INSERT
-AS
-BEGIN
-    DECLARE @SLXuat_Insert INT, @TonKho INT
-    SELECT @SLXuat_Insert = SoLuongXuat from inserted
-    SELECT @TonKho = SLCuoi FROM TonKho
-    WHERE MaVatTu IN(SELECT MaVatTu FROM inserted)
-    BEGIN TRANSACTION
-    IF(@SLXuat_Insert <= @TonKho)
-    BEGIN
-    PRINT N'Đã thêm bản ghi thành công!'
-    COMMIT TRANSACTION    
-    END
-    ELSE
-    BEGIN
-    PRINT N'Không đủ vật tư để xuất'
-    ROLLBACK
-    END
-END
+
 INSERT INTO ChiTietPhieuXuat VALUES('PX04', 'VT02', 500, 212000) --Không thêm được bản ghi vì không đủ hàng để xuất--
 INSERT INTO ChiTietPhieuXuat VALUES('PX02', 'VT03', 110, 123000) --Thêm bản ghi thành công!--
 DELETE FROM ChiTietPhieuXuat WHERE MaSoPhieuXuat = 'PX04' AND MaVatTu = 'VT02'
