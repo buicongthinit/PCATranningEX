@@ -22,7 +22,9 @@ CREATE TABLE VatTu
     TiLePhanTram int NOT NULL,
     CONSTRAINT PK_VatTu PRIMARY KEY(MaVatTu)
 )
-
+/*IF OBJECT_ID('NhaCungCap', 'U') IS NOT NULL
+DROP TABLE NhaCungCap
+*/
 CREATE TABLE NhaCungCap
 (
     MaNCC VARCHAR(10) NOT NULL,
@@ -122,13 +124,14 @@ SELECT MONTH(NgayDat) [Tháng], YEAR(NgayDat) [Năm] FROM DonDatHang
 --In ra Ngày Đặt theo định dạng dd/mm/yyyy (103)--
 SELECT CONVERT([varchar], NgayDat, 103) from DonDatHang
 
-INSERT INTO ChiTietDonHang VALUES('DDH01', 'VT02', 780)
+INSERT INTO ChiTietDonHang VALUES('DDH01', 'VT02', 140)
 INSERT INTO ChiTietDonHang VALUES('DDH02', 'VT03', 150)
 INSERT INTO ChiTietDonHang VALUES('DDH02', 'VT01', 190)
-INSERT INTO ChiTietDonHang VALUES('DDH03', 'VT04', 90)
+INSERT INTO ChiTietDonHang VALUES('DDH03', 'VT04', 45)
 INSERT INTO ChiTietDonHang VALUES('DDH03', 'VT05', 900)
-INSERT INTO ChiTietDonHang VALUES('DDH04', 'VT02', 99)
 INSERT INTO ChiTietDonHang VALUES('DDH05', 'VT05', 270)
+UPDATE ChiTietDonHang SET SoLuong = 176 WHERE MaDDH = 'DDH03' AND MaVatTu = 'VT04'
+
 SELECT * FROM ChiTietDonHang
 
 SET DATEFORMAT DMY
@@ -300,24 +303,27 @@ FROM VatTu INNER JOIN ChiTietPhieuXuat ON VatTu.MaVatTu = ChiTietPhieuXuat.MaVat
 GROUP BY VatTu.MaVatTu, TenVatTu
 ORDER BY SUM(SoLuongXuat) DESC
 --Câu 16: Tính tổng tiền của các đơn đặt hàng, đưa ra đơn đặt hàng có giá trị lớn nhất--
-SELECT TOP 10 MaDDH,ChiTietDonHang.MaVatTu ,SUM(SoLuongNhap*DonGia) [Tổng tiền]
-FROM ChiTietPhieuNhap INNER JOIN ChiTietDonHang ON ChiTietDonHang.MaVatTu = ChiTietPhieuNhap.MaVatTu
-GROUP BY MaDDH, ChiTietDonHang.MaVatTu
+-- SELECT TOP 10 ctdh.MaDDH, SUM(SoLuongNhap * DonGia) 
+-- FROM ChiTietDonHang ctdh, PhieuNhapHang pnh, ChiTietPhieuNhap
+-- WHERE ctdh.MaDDH = pnh.MaDDH AND ChiTietPhieuNhap.MaVatTu = ctdh.MaVatTu AND pnh.MaSoPhieuNhap = ChiTietPhieuNhap.MaSoPhieuNhap
+-- GROUP BY ctdh.MaDDH
+-- ORDER BY SUM(SoLuongNhap*DonGia) DESC
+
+
+SELECT TOP 10 MaDDH,SUM(SoLuongNhap*DonGia)
+FROM ChiTietPhieuNhap INNER JOIN ChiTietDonHang ON ChiTietDonHang.MaVatTu = ChiTietPhieuNhap.MaVatTu 
+WHERE MaSoPhieuNhap IN
+(SELECT MaSoPhieuNhap FROM PhieuNhapHang)
+group by MaDDH
 ORDER BY SUM(SoLuongNhap*DonGia) DESC
 
+-- SELECT MaDDH, ChiTietDonHang.MaVatTu, MaSoPhieuNhap,SoLuong, SoLuongNhap*DonGia FROM ChiTietDonHang INNER JOIN ChiTietPhieuNhap ON ChiTietDonHang.MaVatTu = ChiTietPhieuNhap.MaVatTu
 
-SELECT TOP 1 MaDDH from ChiTietDonHang
-WHERE MaVatTu IN
-(
-    select TOP 1 MaVatTu from ChiTietPhieuNhap
-    GROUP by MaVatTu
-    ORDER by SUM(SoLuongNhap*DonGia) DESC
-)
 
 --Câu 17: Thống kê những đơn đặt hàng nhập chưa đủ số lượng--
-SELECT DISTINCT MaDDH, ChiTietDonHang.MaVatTu, (SoLuong) [Số lượng hàng đặt], (SoLuongNhap) [Số lượng hàng nhập về]
-FROM ChiTietDonHang INNER JOIN ChiTietPhieuNhap ON ChiTietDonHang.MaVatTu = ChiTietPhieuNhap.MaVatTu
-WHERE SoLuong > SoLuongNhap
+SELECT DISTINCT ChiTietDonHang.MaDDH, ChiTietDonHang.MaVatTu, (SoLuong) [Số lượng hàng đặt], (SoLuongNhap) [Số lượng hàng nhập về]
+FROM ChiTietDonHang, ChiTietPhieuNhap, PhieuNhapHang
+WHERE ChiTietDonHang.MaDDH = PhieuNhapHang.MaDDH AND ChiTietDonHang.MaVatTu = ChiTietPhieuNhap.MaVatTu AND PhieuNhapHang.MaSoPhieuNhap = ChiTietPhieuNhap.MaSoPhieuNhap AND SoLuong > SoLuongNhap
 -- GROUP BY MaDDH, ChiTietDonHang.MaVatTu, SoLuong, SoLuongNhap
 
 
@@ -329,23 +335,35 @@ WITH CHECK OPTION
 SELECT * FROM vw_DMVT
 /*Câu 19: Tao View vw_DonDH_TongSLDatNhap gồmm Mã hóa đơn, Số lượng đặt, Tổng số lượng nhập
 dùng để thống kê những đơn đặt hàng đã được nhập hàng đầy đủ*/
-CREATE VIEW vw_DonDH_TongSLDatNhap AS
-SELECT MaDDH, SoLuong, SoLuongNhap FROM ChiTietDonHang INNER JOIN ChiTietPhieuNhap ON ChiTietDonHang.MaVatTu = ChiTietPhieuNhap.MaVatTu
-WHERE SoLuongNhap = SoLuong
+ALTER VIEW vw_DonDH_TongSLDatNhap AS
+SELECT ChiTietDonHang.MaDDH, SoLuong, SoLuongNhap FROM ChiTietDonHang, ChiTietPhieuNhap, PhieuNhapHang
+WHERE ChiTietDonHang.MaDDH = PhieuNhapHang.MaDDH AND ChiTietDonHang.MaVatTu = ChiTietPhieuNhap.MaVatTu AND PhieuNhapHang.MaSoPhieuNhap = ChiTietPhieuNhap.MaSoPhieuNhap AND SoLuong = SoLuongNhap
+
 -- DROP VIEW vw_DonDH_TongSLDatNhap
 SELECT * FROM vw_DonDH_TongSLDatNhap
 /*Câu 20: Tạo View vw_DonDH_DaNhapDu gồm (Số DH, DaNhapDu) có hai giá trị là 
 - “Da Nhap Du” nếu đơn hàng đó đã nhập đủ.
 - “Chua Nhap Du” nếu đơn đặt hàng chưa nhập đủ*/
 CREATE VIEW vw_DonDH_DaNhapDu AS
-SELECT DISTINCT MaDDH, ChiTietDonHang.MaVatTu, CASE
-WHEN SoLuong = SoLuongNhap THEN N'Đã nhập đủ'
+SELECT DISTINCT ChiTietDonHang.MaDDH, ChiTietDonHang.MaVatTu,CASE
+WHEN SUM(SoLuong) = SUM(SoLuongNhap) THEN N'Đã nhập đủ'
 ELSE N'Chưa nhập đủ'
 END
 AS [Tình trạng]
 FROM ChiTietDonHang INNER JOIN ChiTietPhieuNhap ON ChiTietDonHang.MaVatTu = ChiTietPhieuNhap.MaVatTu
+INNER JOIN PhieuNhapHang ON PhieuNhapHang.MaSoPhieuNhap = ChiTietPhieuNhap.MaSoPhieuNhap AND PhieuNhapHang.MaDDH = ChiTietDonHang.MaDDH
+GROUP BY ChiTietDonHang.MaDDH, ChiTietDonHang.MaVatTu
 
 SELECT * FROM vw_DonDH_DaNhapDu
+SELECT * FROM ChiTietDonHang ORDER BY MaDDH
+SELECT * FROM ChiTietPhieuNhap
+
+SELECT * FROM ChiTietDonHang INNER JOIN
+(SELECT MaDDH, ChiTietPhieuNhap.MaSoPhieuNhap, MaVatTu, SoLuongNhap 
+from ChiTietPhieuNhap inner join PhieuNhapHang on ChiTietPhieuNhap.MaSoPhieuNhap = PhieuNhapHang.MaSoPhieuNhap)
+as [TAM] 
+ON TAM.MaDDH = ChiTietDonHang.MaDDH AND ChiTietDonHang.MaVatTu = TAM.MaVatTu
+
 
 /*Câu 21: Tạo View vw_TongNhap gồm (NamThang, MaVTu và TongSLNhap) 
 dùng để thống kê số lượng nhập của các vật tư trong năm tháng tương ứng (Không sử dụng bảng tồn kho)*/
@@ -746,3 +764,15 @@ DELETE FROM ChiTietPhieuXuat WHERE MaSoPhieuXuat = 'PX04' AND MaVatTu = 'VT02'
 
 SELECT * FROM ChiTietPhieuXuat
 SELECT * FROM TonKho
+
+
+
+
+SELECT * FROM VatTu
+SELECT * FROM NhaCungCap
+SELECT * FROM DonDatHang
+SELECT * FROM ChiTietDonHang
+SELECT * FROM PhieuNhapHang
+SELECT * FROM ChiTietPhieuNhap
+SELECT * FROM PhieuXuatHang
+SELECT * FROM ChiTietPhieuXuat
