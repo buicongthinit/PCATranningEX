@@ -130,7 +130,7 @@ INSERT INTO ChiTietDonHang VALUES('DDH02', 'VT01', 190)
 INSERT INTO ChiTietDonHang VALUES('DDH03', 'VT04', 45)
 INSERT INTO ChiTietDonHang VALUES('DDH03', 'VT05', 900)
 INSERT INTO ChiTietDonHang VALUES('DDH05', 'VT05', 270)
-UPDATE ChiTietDonHang SET SoLuong = 176 WHERE MaDDH = 'DDH03' AND MaVatTu = 'VT04'
+UPDATE ChiTietDonHang SET SoLuong = 65 WHERE MaDDH = 'DDH03' AND MaVatTu = 'VT04'
 
 SELECT * FROM ChiTietDonHang
 
@@ -321,12 +321,13 @@ ORDER BY SUM(SoLuongNhap*DonGia) DESC
 
 
 --Câu 17: Thống kê những đơn đặt hàng nhập chưa đủ số lượng--
-SELECT DISTINCT ChiTietDonHang.MaDDH, ChiTietDonHang.MaVatTu, (SoLuong) [Số lượng hàng đặt], (SoLuongNhap) [Số lượng hàng nhập về]
-FROM ChiTietDonHang, ChiTietPhieuNhap, PhieuNhapHang
-WHERE ChiTietDonHang.MaDDH = PhieuNhapHang.MaDDH AND ChiTietDonHang.MaVatTu = ChiTietPhieuNhap.MaVatTu AND PhieuNhapHang.MaSoPhieuNhap = ChiTietPhieuNhap.MaSoPhieuNhap AND SoLuong > SoLuongNhap
--- GROUP BY MaDDH, ChiTietDonHang.MaVatTu, SoLuong, SoLuongNhap
-
-
+SELECT ChiTietDonHang.MaDDH, ChiTietDonHang.MaVatTu, SUM(SoLuong), tam.[Tong nhap] FROM
+(SELECT MaDDH,MaVatTu, SUM(SoLuongNhap)[Tong nhap] FROM ChiTietPhieuNhap INNER JOIN PhieuNhapHang
+on ChiTietPhieuNhap.MaSoPhieuNhap = PhieuNhapHang.MaSoPhieuNhap
+GROUP BY MaDDH,MaVatTu) as tam
+INNER JOIN ChiTietDonHang ON TAM.MaVatTu = ChiTietDonHang.MaVatTu
+GROUP BY ChiTietDonHang.MaDDH, ChiTietDonHang.MaVatTu, TAM.[Tong nhap]
+HAVING SUM(SoLuong) > TAM.[Tong nhap]
 /*  View - Bài tập ngày 13/08/2018    */
 --Câu 18: Tạo View vw_DMVT gồm Mã vật tư và Tên vật tư dùng liệt kê sanh sách trong bảng vật tư--
 CREATE VIEW vw_DMVT AS
@@ -338,57 +339,56 @@ dùng để thống kê những đơn đặt hàng đã được nhập hàng đ
 ALTER VIEW vw_DonDH_TongSLDatNhap AS
 SELECT ChiTietDonHang.MaDDH, SoLuong, SoLuongNhap FROM ChiTietDonHang, ChiTietPhieuNhap, PhieuNhapHang
 WHERE ChiTietDonHang.MaDDH = PhieuNhapHang.MaDDH AND ChiTietDonHang.MaVatTu = ChiTietPhieuNhap.MaVatTu AND PhieuNhapHang.MaSoPhieuNhap = ChiTietPhieuNhap.MaSoPhieuNhap AND SoLuong = SoLuongNhap
-
+WITH CHECK OPTION
 -- DROP VIEW vw_DonDH_TongSLDatNhap
 SELECT * FROM vw_DonDH_TongSLDatNhap
 /*Câu 20: Tạo View vw_DonDH_DaNhapDu gồm (Số DH, DaNhapDu) có hai giá trị là 
 - “Da Nhap Du” nếu đơn hàng đó đã nhập đủ.
 - “Chua Nhap Du” nếu đơn đặt hàng chưa nhập đủ*/
-CREATE VIEW vw_DonDH_DaNhapDu AS
+ALTER VIEW vw_DonDH_DaNhapDu AS
 SELECT DISTINCT ChiTietDonHang.MaDDH, ChiTietDonHang.MaVatTu,CASE
-WHEN SUM(SoLuong) = SUM(SoLuongNhap) THEN N'Đã nhập đủ'
+WHEN SUM(SoLuong) = tam.[Tong nhap] THEN N'Đã nhập đủ'
 ELSE N'Chưa nhập đủ'
 END
 AS [Tình trạng]
-FROM ChiTietDonHang INNER JOIN ChiTietPhieuNhap ON ChiTietDonHang.MaVatTu = ChiTietPhieuNhap.MaVatTu
-INNER JOIN PhieuNhapHang ON PhieuNhapHang.MaSoPhieuNhap = ChiTietPhieuNhap.MaSoPhieuNhap AND PhieuNhapHang.MaDDH = ChiTietDonHang.MaDDH
-GROUP BY ChiTietDonHang.MaDDH, ChiTietDonHang.MaVatTu
+FROM (SELECT MaDDH,MaVatTu, SUM(SoLuongNhap)[Tong nhap] FROM ChiTietPhieuNhap INNER JOIN PhieuNhapHang
+on ChiTietPhieuNhap.MaSoPhieuNhap = PhieuNhapHang.MaSoPhieuNhap
+GROUP BY MaDDH,MaVatTu) as tam
+INNER JOIN ChiTietDonHang ON TAM.MaVatTu = ChiTietDonHang.MaVatTu
+GROUP BY ChiTietDonHang.MaDDH, ChiTietDonHang.MaVatTu, tam.[Tong nhap]
+WITH CHECK OPTION
 
 SELECT * FROM vw_DonDH_DaNhapDu
 SELECT * FROM ChiTietDonHang ORDER BY MaDDH
 SELECT * FROM ChiTietPhieuNhap
 
-SELECT * FROM ChiTietDonHang INNER JOIN
-(SELECT MaDDH, ChiTietPhieuNhap.MaSoPhieuNhap, MaVatTu, SoLuongNhap 
-from ChiTietPhieuNhap inner join PhieuNhapHang on ChiTietPhieuNhap.MaSoPhieuNhap = PhieuNhapHang.MaSoPhieuNhap)
-as [TAM] 
-ON TAM.MaDDH = ChiTietDonHang.MaDDH AND ChiTietDonHang.MaVatTu = TAM.MaVatTu
-
-
 /*Câu 21: Tạo View vw_TongNhap gồm (NamThang, MaVTu và TongSLNhap) 
 dùng để thống kê số lượng nhập của các vật tư trong năm tháng tương ứng (Không sử dụng bảng tồn kho)*/
 --Cách 1: Sử dụng CAST để chuyển đổi kiểu dữ liệu--
-CREATE VIEW vw_TongNhap1 AS
+ALTER VIEW vw_TongNhap1 AS
 SELECT CAST(MONTH(NgayNhap) AS varchar)+'/'+CAST(YEAR(NgayNhap) AS VARCHAR) AS [Thời gian], MaVatTu [Mã vật tư], SUM(SoLuongNhap) [Tổng số lượng nhập] FROM ChiTietPhieuNhap INNER JOIN PhieuNhapHang ON ChiTietPhieuNhap.MaSoPhieuNhap = PhieuNhapHang.MaSoPhieuNhap
 WHERE MONTH(NgayNhap) = '12' AND YEAR(NgayNhap) = '2017'
 GROUP BY MONTH(NgayNhap), YEAR(NgayNhap), MaVatTu
+WITH CHECK OPTION
 
 SELECT * FROM vw_TongNhap1
 --Cách 2: Sử dụng CONCAT để nối Tháng và Năm--
-CREATE VIEW vw_TongNhap2 AS
+ALTER VIEW vw_TongNhap2 AS
 SELECT CONCAT(MONTH(NgayNhap),'/',YEAR(NgayNhap)) AS [Thời gian],MaVatTu [Mã vật tư] ,SUM(SoLuongNhap) [Tổng số lượng nhập] 
 FROM ChiTietPhieuNhap INNER JOIN PhieuNhapHang ON ChiTietPhieuNhap.MaSoPhieuNhap = PhieuNhapHang.MaSoPhieuNhap
 WHERE MONTH(NgayNhap) = '12' AND YEAR(NgayNhap) = '2017'
 GROUP BY MONTH(NgayNhap), YEAR(NgayNhap), MaVatTu
+WITH CHECK OPTION
 
 SELECT * from vw_TongNhap2
 /*Câu 22: Tạo View vw_TongXuat gồm (NamThang, MaVTu và TongSLXuat) 
 dùng để thống kê SL xuất của vật tư trong từng năm tương ứng (Không sử dụng bảng tồn kho)*/
-CREATE VIEW vw_TongXuat AS
+ALTER VIEW vw_TongXuat AS
 SELECT CONCAT(MONTH(NgayXuat), '/', YEAR(NgayXuat)) [Thời gian], MaVatTu [Mã vật tư], SUM(SoLuongXuat) [Tổng số lượng]
 FROM PhieuXuatHang INNER JOIN ChiTietPhieuXuat ON PhieuXuatHang.MaSoPhieuXuat = ChiTietPhieuXuat.MaSoPhieuXuat
 WHERE MONTH(NgayXuat) = '2' AND YEAR(NgayXuat) = '2018'
 GROUP BY MONTH(NgayXuat), YEAR(NgayXuat), MaVatTu
+WITH CHECK OPTION
 
 SELECT * FROM vw_TongXuat
 
@@ -396,7 +396,9 @@ SELECT * FROM vw_TongXuat
 --Câu 23. Tạo Stored procedure (SP) cho biết tổng số lượng cuối của vật tư với mã vật tư là tham số vào--
 CREATE PROCEDURE sp_SoLuongCuoi_TonKho @MaVT VARCHAR(10)
 AS
+BEGIN
 SELECT SLCuoi FROM TonKho WHERE MaVatTu = @MaVT
+END
 
 EXEC sp_SoLuongCuoi_TonKho @MaVT = 'VT01'
 --Câu 24. Tạo SP cho biết tổng tiền xuất của vật tư với mã vật tư là tham số vào--
